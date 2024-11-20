@@ -29,7 +29,7 @@ let isAIEnabled = true;
 async function getAIResponse(message, retryCount = 0) {
     try {
         // Create a context-aware prompt
-        const prompt = `Kamu adalah Asro (Asisten Rojak), asisten virtual milik Abdul Rojak. 
+        const prompt = `Kamu adalah Asro (Asisten ${process.env.YOUR_NAME}), asisten virtual milik ${process.env.YOUR_NAME}. 
         Kamu harus menjawab dengan sopan, ramah, dan membantu. 
         Berikut beberapa aturan untuk menjawab:
         1. Gunakan bahasa yang sopan dan formal
