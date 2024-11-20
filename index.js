@@ -1,22 +1,42 @@
 require('dotenv').config();
-const { Client } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const pino = require('pino');
+const qrcode = require('qrcode-terminal');
+const fs = require('fs');
 
-console.log('Starting Asro (Asisten Rojak)...');
+// Create logs directory if it doesn't exist
+const LOGS_DIR = './logs';
+if (!fs.existsSync(LOGS_DIR)) {
+    fs.mkdirSync(LOGS_DIR);
+}
+
+// Setup logging
+const logger = pino({
+    level: 'info',
+    transport: {
+        target: 'pino-pretty',
+        options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+        }
+    }
+}, pino.destination('./logs/bot.log'));
+
+// Log both to file and console
+const log = (...args) => {
+    console.log(...args);
+    logger.info(args.join(' '));
+};
+
+log('Starting Asro (Asisten Rojak)...');
 
 // Check for required environment variables
 if (!process.env.GEMINI_API_KEY) {
-    console.error('Error: GEMINI_API_KEY is not set in environment variables');
+    log('Error: GEMINI_API_KEY is not set in environment variables');
     process.exit(1);
 }
-
-// Initialize the WhatsApp client with minimal configuration
-const client = new Client({
-    puppeteer: {
-        args: ['--no-sandbox']
-    }
-});
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -28,114 +48,162 @@ let isAIEnabled = true;
 // Function to get AI response
 async function getAIResponse(message, retryCount = 0) {
     try {
-        // Create a context-aware prompt
+        log('Generating AI response for:', message);
         const prompt = `Kamu adalah Asro (Asisten ${process.env.YOUR_NAME}), asisten virtual milik ${process.env.YOUR_NAME}. 
         Kamu harus menjawab dengan sopan, ramah, dan membantu. 
         Berikut beberapa aturan untuk menjawab:
         1. Gunakan bahasa yang sopan dan formal
         2. Selalu perkenalkan diri sebagai Asro di awal percakapan
         3. Berikan jawaban yang informatif tapi ringkas
-        4. Jika ada yang bertanya tentang pemilikmu, jelaskan bahwa kamu adalah asisten virtual milik Abdul Rojak
+        4. Jika ada yang bertanya tentang pemilikmu, jelaskan bahwa kamu adalah asisten virtual milik ${process.env.YOUR_NAME} yang berbasis AI yang canggih
+        5. jangan ulangi sapaan setiap membalas chat, sapaan hanya di gunakan untuk pertama kali membalas saja, selanjutnya berikan jawaban sesuai kebutuhan pengguna.
+        6. anda di ciptakan oleh seorang fullstack developer dengan nama ${process.env.YOUR_NAME}
         
         Pesan dari pengguna: "${message}"`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
+        log('AI response generated successfully');
         return response.text();
     } catch (error) {
-        console.error('AI Error:', error);
+        logger.error('AI Error:', error);
         
-        // Handle specific error cases
-        if (error.status === 503) {
-            if (retryCount < 2) {
-                console.log(`Retrying request (attempt ${retryCount + 1})...`);
-                await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
-                return getAIResponse(message, retryCount + 1);
-            }
-            return 'Maaf, layanan AI sedang sibuk. Mohon tunggu beberapa saat dan coba lagi.';
+        if (error.status === 503 && retryCount < 2) {
+            log(`Retrying AI request (attempt ${retryCount + 1})...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+            return getAIResponse(message, retryCount + 1);
         }
         
-        if (error.status === 429) {
-            return 'Maaf, kuota AI sudah mencapai batas. Mohon coba lagi besok.';
-        }
-
-        return 'Maaf, saya mengalami kendala teknis. Mohon coba lagi dalam beberapa saat.';
+        return 'Maaf, saya sedang mengalami masalah teknis. Mohon coba lagi nanti.';
     }
 }
 
-// Basic message handling
-client.on('message', async (message) => {
+// Ensure auth directory exists
+const AUTH_DIR = './auth_info_baileys';
+if (!fs.existsSync(AUTH_DIR)) {
+    fs.mkdirSync(AUTH_DIR);
+}
+
+async function connectToWhatsApp() {
     try {
-        if (message.fromMe) return; // Ignore messages from self
+        const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
         
-        console.log('Received message:', message.body);
-        const text = message.body.toLowerCase();
+        const sock = makeWASocket({
+            auth: state,
+            printQRInTerminal: true,
+            logger: pino({ level: 'silent' }),
+            browser: ['Chrome (Linux)', 'Desktop', '1.0.0'],
+            syncFullHistory: false,
+            markOnlineOnConnect: true,
+            connectTimeoutMs: 60_000,
+            defaultQueryTimeoutMs: 60_000,
+            keepAliveIntervalMs: 10_000,
+            emitOwnEvents: false,
+            fireInitQueries: false,
+            downloadHistory: false
+        });
 
-        // Handle AI toggle commands
-        if (text === 'stopai') {
-            isAIEnabled = false;
-            await message.reply('Baik, saya akan berhenti menjawab menggunakan AI. Gunakan "onai" untuk mengaktifkan saya kembali.');
-            return;
-        }
+        // Handle connection events
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
 
-        if (text === 'onai') {
-            isAIEnabled = true;
-            await message.reply('Halo! Saya Asro, asisten virtual Abdul Rojak. Saya sudah aktif kembali dan siap membantu Anda!');
-            return;
-        }
+            if (qr) {
+                log('QR Code received, please scan with WhatsApp');
+            }
 
-        // If AI is enabled, process all messages with AI
-        if (isAIEnabled) {
+            if (connection === 'close') {
+                const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+                log('Connection closed due to:', lastDisconnect?.error?.output?.payload);
+                
+                if (shouldReconnect) {
+                    log('Reconnecting to WhatsApp...');
+                    setTimeout(connectToWhatsApp, 5000);
+                } else {
+                    log('Session ended. Please scan the QR code again.');
+                    if (fs.existsSync(AUTH_DIR)) {
+                        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+                    }
+                    setTimeout(connectToWhatsApp, 5000);
+                }
+            } else if (connection === 'open') {
+                log('WhatsApp connection established successfully!');
+            }
+        });
+
+        // Save credentials whenever they are updated
+        sock.ev.on('creds.update', saveCreds);
+
+        // Handle messages
+        sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            if (type !== 'notify') return;
+
+            const m = messages[0];
+            if (!m.message || m.key.fromMe) return;
+
+            const messageContent = m.message?.conversation || 
+                                 m.message?.extendedTextMessage?.text || 
+                                 m.message?.imageMessage?.caption || 
+                                 '';
+            
+            if (!messageContent) return;
+
+            const sender = m.key.remoteJid;
+            log(`New message from ${sender}:`, messageContent);
+
             try {
-                console.log('Processing message with AI...');
-                const aiResponse = await getAIResponse(message.body);
-                await message.reply(aiResponse);
-                console.log('AI response sent successfully');
+                if (messageContent.toLowerCase() === '/ai off') {
+                    isAIEnabled = false;
+                    log('AI mode disabled by user');
+                    await sock.sendMessage(sender, { 
+                        text: 'AI mode dinonaktifkan.' 
+                    }, { quoted: m });
+                    return;
+                }
+
+                if (messageContent.toLowerCase() === '/ai on') {
+                    isAIEnabled = true;
+                    log('AI mode enabled by user');
+                    await sock.sendMessage(sender, { 
+                        text: 'AI mode diaktifkan.' 
+                    }, { quoted: m });
+                    return;
+                }
+
+                if (isAIEnabled) {
+                    log('Processing message with AI...');
+                    const aiResponse = await getAIResponse(messageContent);
+                    log('Sending AI response:', aiResponse);
+                    
+                    await sock.sendMessage(sender, { 
+                        text: aiResponse 
+                    }, { 
+                        quoted: m 
+                    });
+                    log('AI response sent successfully');
+                }
             } catch (error) {
-                console.error('Error in AI response:', error);
-                await message.reply('Maaf, saya mengalami kendala. Mohon coba beberapa saat lagi.');
+                logger.error('Error processing message:', error);
+                await sock.sendMessage(sender, { 
+                    text: 'Maaf, terjadi kesalahan dalam memproses pesan Anda.' 
+                }, { 
+                    quoted: m 
+                });
             }
-        }
-        // If AI is disabled, ignore messages except for 'onai' command
+        });
 
+        return sock;
     } catch (error) {
-        console.error('Error handling message:', error);
-        if (isAIEnabled) {
-            try {
-                await message.reply('Maaf, terjadi kesalahan. Silakan coba lagi.');
-            } catch (replyError) {
-                console.error('Error sending error message:', replyError);
-            }
-        }
+        logger.error('Error in connectToWhatsApp:', error);
+        log('Retrying connection in 5 seconds...');
+        setTimeout(connectToWhatsApp, 5000);
     }
-});
-
-// QR Code event
-client.on('qr', (qr) => {
-    console.log('QR Code received. Please scan:');
-    qrcode.generate(qr, { small: true });
-});
-
-// Ready event
-client.on('ready', () => {
-    console.log('Asro (Asisten Rojak) sudah siap melayani!');
-});
-
-// Authentication failure
-client.on('auth_failure', (msg) => {
-    console.error('Authentication failed:', msg);
-});
-
-// Disconnected event
-client.on('disconnected', (reason) => {
-    console.log('Client was disconnected:', reason);
-});
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (error) => {
-    console.error('Unhandled promise rejection:', error);
+    logger.error('Unhandled promise rejection:', error);
 });
 
-// Initialize client
-console.log('Initializing Asro...');
-client.initialize();
+// Start the bot
+log('Starting WhatsApp connection...');
+connectToWhatsApp();

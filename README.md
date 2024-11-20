@@ -1,98 +1,117 @@
-# Asro (Asisten Rojak) - WhatsApp Bot
+# Asro (Asisten Rojak) - WhatsApp AI Bot
 
-A WhatsApp bot powered by Google's Gemini AI that provides intelligent responses and automated interactions.
+Asro adalah asisten virtual berbasis AI yang diintegrasikan dengan WhatsApp. Bot ini menggunakan Google Gemini AI untuk memberikan respons cerdas dan kontekstual terhadap pesan pengguna.
 
-## Features
+## 🌟 Fitur
 
-- 🤖 AI-powered responses using Google's Gemini Pro model
-- 💬 Natural language understanding and context-aware conversations
-- ⚡ Real-time message processing
-- 🔄 Automatic reconnection handling
-- 🔐 Environment-based configuration
-- 🎯 Customizable AI behavior
+- 🤖 Respons AI yang cerdas menggunakan Google Gemini Pro
+- 💬 Pemrosesan bahasa natural yang canggih
+- ⚡ Respons real-time untuk pesan WhatsApp
+- 🔄 Koneksi otomatis dan penanganan error
+- 🔐 Konfigurasi berbasis environment
+- 🎯 Mode AI yang dapat diaktifkan/nonaktifkan
 
-## Prerequisites
+## 📋 Prasyarat
 
-- Node.js (Latest LTS version recommended)
+- Node.js (versi LTS terbaru)
 - npm (Node Package Manager)
-- A Google Cloud account with Gemini API access
-- WhatsApp account for the bot
+- Akun Google Cloud dengan akses Gemini API
+- Akun WhatsApp aktif
 
-## Installation
+## 🚀 Instalasi
 
-1. Clone the repository:
+1. Clone repositori:
 ```bash
 git clone <repository-url>
 cd whatsapp-bot
 ```
 
-2. Install dependencies:
+2. Install dependensi:
 ```bash
 npm install
 ```
 
-3. Create a `.env` file based on `.env.example`:
+3. Buat file `.env` berdasarkan `.env.example`:
 ```bash
 cp .env.example .env
 ```
 
-4. Configure your environment variables in `.env`:
+4. Konfigurasi variabel environment di `.env`:
 ```
 GEMINI_API_KEY=your_gemini_api_key_here
 YOUR_NAME=your_name_here
 ```
 
-## Usage
+## 🎮 Penggunaan
 
-1. Start the bot:
-```bash
-npm start
-```
-
-2. For development with auto-reload:
+1. Mulai bot dalam mode development:
 ```bash
 npm run dev
 ```
 
-3. Scan the QR code that appears in the terminal with WhatsApp Web to connect your WhatsApp account.
+2. Untuk production:
+```bash
+npm start
+```
 
-## Configuration
+3. Scan QR code yang muncul di terminal dengan WhatsApp untuk menghubungkan akun.
 
-The bot's behavior can be customized through:
+### Perintah Bot
 
-1. Environment Variables:
-- `GEMINI_API_KEY`: Your Google Gemini API key
-- `YOUR_NAME`: Your name for the bot's responses
+- `/ai on` - Mengaktifkan mode AI
+- `/ai off` - Menonaktifkan mode AI
 
-2. AI Behavior:
-The bot is configured to:
-- Respond politely and formally
-- Introduce itself as Asro
-- Provide informative but concise answers
-- Identify itself as your virtual assistant
+## 🛠️ Teknologi
 
-## Dependencies
+- Backend: Node.js
+- WhatsApp Client: @whiskeysockets/baileys
+- AI: Google Gemini AI (@google/generative-ai)
+- Logging: pino & pino-pretty
+- Development: nodemon
 
-- `whatsapp-web.js`: WhatsApp Web API client
-- `@google/generative-ai`: Google's Gemini AI API
-- `dotenv`: Environment configuration
-- `qrcode-terminal`: QR code generation
-- `puppeteer`: Browser automation
-- `nodemon`: Development auto-reload
+## 📁 Struktur Proyek
 
-## Troubleshooting
+```
+whatsapp-bot/
+├── index.js           # File utama aplikasi
+├── .env              # Konfigurasi environment
+├── .env.example      # Contoh konfigurasi environment
+├── package.json      # Dependensi dan skrip
+├── nodemon.json      # Konfigurasi development
+└── logs/            # Direktori log
+```
 
-If you encounter issues:
+## 🔒 Keamanan
 
-1. Make sure all environment variables are properly set
-2. Check your internet connection
-3. Ensure your WhatsApp account is active
-4. Verify your Gemini API key is valid
+- Menggunakan variabel environment untuk data sensitif
+- Autentikasi sesi WhatsApp yang aman
+- Tidak menyimpan data pesan pengguna
 
-## Contributing
+## 🤝 Kontribusi
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Kontribusi selalu diterima! Silakan buat pull request atau laporkan issue.
 
-## License
+## 📝 Lisensi
 
-This project is open-source and available under the MIT License.
+Proyek ini dilisensikan di bawah [MIT License](LICENSE).
+
+## 👨‍💻 Pengembang
+
+Dibuat oleh Abdul Rojak - Fullstack Developer
+
+## ⚠️ Troubleshooting
+
+1. Jika bot tidak dapat terhubung:
+   - Pastikan internet stabil
+   - Hapus folder `auth_info_baileys`
+   - Restart bot dan scan ulang QR code
+
+2. Jika AI tidak merespons:
+   - Periksa GEMINI_API_KEY
+   - Pastikan mode AI aktif (/ai on)
+   - Periksa log untuk error detail
+
+3. Masalah umum lainnya:
+   - Periksa file log di folder `logs`
+   - Pastikan semua dependensi terinstal
+   - Verifikasi konfigurasi environment
